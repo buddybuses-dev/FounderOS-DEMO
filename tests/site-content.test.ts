@@ -69,3 +69,34 @@ describe('site content model', () => {
     expect(isSiteRoute(null)).toBe(false);
   });
 });
+
+describe('console links survive a standalone deploy', () => {
+  test('isExternal recognizes links that leave the site', async () => {
+    const { isExternal } = await import('@/lib/site/content');
+    expect(isExternal('https://example.com')).toBe(true);
+    expect(isExternal('mailto:a@b.c')).toBe(true);
+    expect(isExternal('/agents')).toBe(false);
+    expect(isExternal('#manifesto')).toBe(false);
+  });
+
+  test('with no override, console routes are used as written (same-origin app)', async () => {
+    const prev = process.env.NEXT_PUBLIC_CONSOLE_URL;
+    delete process.env.NEXT_PUBLIC_CONSOLE_URL;
+    const { consoleHref } = await import('@/lib/site/content');
+    expect(consoleHref('/agents')).toBe('/agents');
+    expect(consoleHref('/')).toBe('/');
+    if (prev !== undefined) process.env.NEXT_PUBLIC_CONSOLE_URL = prev;
+  });
+
+  test('with an override, every console route points at the real console — never a dead route', async () => {
+    const prev = process.env.NEXT_PUBLIC_CONSOLE_URL;
+    process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://example.com/console/';
+    const { consoleHref } = await import('@/lib/site/content');
+    expect(consoleHref('/agents')).toBe('https://example.com/console');
+    expect(consoleHref('/')).toBe('https://example.com/console');
+    // external links are never rewritten
+    expect(consoleHref('https://www.thefounderos.com')).toBe('https://www.thefounderos.com');
+    if (prev === undefined) delete process.env.NEXT_PUBLIC_CONSOLE_URL;
+    else process.env.NEXT_PUBLIC_CONSOLE_URL = prev;
+  });
+});

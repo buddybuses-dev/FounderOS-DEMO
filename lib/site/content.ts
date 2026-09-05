@@ -294,6 +294,26 @@ const CONTENT = {
 
 export const SITE: SiteContent = SiteContentSchema.parse(CONTENT);
 
+/** True for anything that leaves this site (an absolute URL or a mail link). */
+export function isExternal(href: string): boolean {
+  return /^(https?:|mailto:)/.test(href);
+}
+
+/**
+ * Resolve a link that points into the operator console.
+ *
+ * In the full app the console is the same origin, so an app route is used as
+ * written. When the site is deployed on its own — a static build with no
+ * console behind it — `NEXT_PUBLIC_CONSOLE_URL` names where the console really
+ * lives, and every console link goes there instead of 404ing on a route that
+ * was never deployed.
+ */
+export function consoleHref(route: string): string {
+  if (isExternal(route)) return route;
+  const base = process.env.NEXT_PUBLIC_CONSOLE_URL?.replace(/\/+$/, '');
+  return base || route;
+}
+
 /** Anchor ids of every section the page renders, in document order. */
 export function sectionIds(): string[] {
   return [

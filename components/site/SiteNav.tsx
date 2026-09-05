@@ -8,7 +8,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { SITE, sectionIds } from '@/lib/site/content';
+import { SITE, consoleHref, isExternal, sectionIds } from '@/lib/site/content';
 import { clamp01 } from '@/lib/site/motion';
 import { usePrefersReducedMotion } from '@/components/site/use-site-motion';
 
@@ -96,10 +96,24 @@ export function SiteNav() {
           ))}
         </nav>
 
-        <Link className="site-header-cta" href={SITE.hero.primary.href}>
-          {SITE.hero.primary.label}
-          <span aria-hidden="true">→</span>
-        </Link>
+        {(() => {
+          const href = consoleHref(SITE.hero.primary.href);
+          const label = (
+            <>
+              {SITE.hero.primary.label}
+              <span aria-hidden="true">→</span>
+            </>
+          );
+          return isExternal(href) ? (
+            <a className="site-header-cta" href={href} target="_blank" rel="noreferrer noopener">
+              {label}
+            </a>
+          ) : (
+            <Link className="site-header-cta" href={href}>
+              {label}
+            </Link>
+          );
+        })()}
       </div>
       <span className="site-header-rule" aria-hidden="true" />
     </header>

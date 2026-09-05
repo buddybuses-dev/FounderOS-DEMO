@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { SITE } from '@/lib/site/content';
+import { SITE, consoleHref, isExternal } from '@/lib/site/content';
 import { AgentFieldLazy, HeroMonolithLazy } from '@/components/site/SceneLazy';
 import { SiteNav } from '@/components/site/SiteNav';
 import { KineticText } from '@/components/site/KineticText';
@@ -11,6 +11,32 @@ import { PillarCarousel } from '@/components/site/PillarCarousel';
 import { CountUp } from '@/components/site/CountUp';
 import { MagneticButton } from '@/components/site/MagneticButton';
 import { CursorLight } from '@/components/site/CursorLight';
+
+/**
+ * A link into the operator console. Routed through `consoleHref`, so the same
+ * markup works whether the console is the same origin or somewhere else
+ * entirely (a standalone static deploy of this site).
+ */
+function ConsoleLink({
+  route,
+  className,
+  children,
+}: {
+  route: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const href = consoleHref(route);
+  return isExternal(href) ? (
+    <a href={href} className={className} target="_blank" rel="noreferrer noopener">
+      {children}
+    </a>
+  ) : (
+    <Link href={href} className={className}>
+      {children}
+    </Link>
+  );
+}
 
 /**
  * The public site. A server component: every word is in the HTML on first
@@ -51,7 +77,9 @@ export default function SitePage() {
             <p className="hero-sub">{hero.sub}</p>
 
             <div className="hero-actions">
-              <MagneticButton href={hero.primary.href}>{hero.primary.label}</MagneticButton>
+              <MagneticButton href={consoleHref(hero.primary.href)} external={isExternal(consoleHref(hero.primary.href))}>
+                {hero.primary.label}
+              </MagneticButton>
               <MagneticButton href={hero.secondary.href} variant="ghost">
                 {hero.secondary.label}
               </MagneticButton>
@@ -166,7 +194,7 @@ export default function SitePage() {
               {modules.map((module, i) => (
                 <Reveal key={module.route} delay={(i % 3) * 0.07}>
                   <TiltCard>
-                    <Link href={module.route} className="module-card">
+                    <ConsoleLink route={module.route} className="module-card">
                       <header className="module-head">
                         <span className="module-route">{module.route}</span>
                         <h3 className="module-title">{module.title}</h3>
@@ -180,7 +208,7 @@ export default function SitePage() {
                       <span className="module-go" aria-hidden="true">
                         Open <i>→</i>
                       </span>
-                    </Link>
+                    </ConsoleLink>
                   </TiltCard>
                 </Reveal>
               ))}
@@ -246,7 +274,9 @@ export default function SitePage() {
               <h2 className="cta-title">{cta.title}</h2>
               <p className="cta-body">{cta.body}</p>
               <div className="hero-actions cta-actions">
-                <MagneticButton href={cta.primary.href}>{cta.primary.label}</MagneticButton>
+                <MagneticButton href={consoleHref(cta.primary.href)} external={isExternal(consoleHref(cta.primary.href))}>
+                  {cta.primary.label}
+                </MagneticButton>
                 <MagneticButton href={cta.secondary.href} variant="ghost" external>
                   {cta.secondary.label}
                 </MagneticButton>
@@ -272,12 +302,10 @@ export default function SitePage() {
               <ul>
                 {column.links.map((link) => (
                   <li key={link.href}>
-                    {link.href.startsWith('http') ? (
-                      <a href={link.href} target="_blank" rel="noreferrer noopener">
-                        {link.label}
-                      </a>
+                    {link.href.startsWith('#') ? (
+                      <a href={link.href}>{link.label}</a>
                     ) : (
-                      <Link href={link.href}>{link.label}</Link>
+                      <ConsoleLink route={link.href}>{link.label}</ConsoleLink>
                     )}
                   </li>
                 ))}

@@ -1,0 +1,5 @@
+/* Tailwind preflight + the few utilities the site's components use. The site's
+   own design system lives in app/site/site.css, imported by the layout. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
