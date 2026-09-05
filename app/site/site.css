@@ -1,0 +1,1422 @@
+/* =============================================================================
+   FOUNDER OS — public site
+   A separate surface from the operator console: its own palette, type scale
+   and motion system, scoped entirely under .site-root so nothing here can
+   leak into the app's themed UI.
+
+   Motion rules that hold everywhere in this file:
+   · transform and opacity only — never animate layout properties
+   · one shared easing, one shared duration scale
+   · every scroll-linked value arrives as a CSS custom property, written once
+     per frame from a rAF, so scrolling never triggers a React render
+   · everything collapses to a static, readable page under reduced motion
+   ========================================================================== */
+
+.site-root {
+  /* --- palette. --site-ink / --site-accent are mirrored as SCENE_INK and
+     SCENE_ACCENT in lib/site/shaders.ts; shaders cannot read CSS vars. */
+  --site-bg: #050506;
+  --site-bg-2: #08080b;
+  --site-panel: #0b0b0f;
+  --site-ink: #f4f6fa;
+  --site-muted: #9a9fb0;
+  --site-dim: #5f6474;
+  --site-accent: #697aff;
+  --site-accent-soft: rgba(105, 122, 255, 0.14);
+  --site-hairline: rgba(244, 246, 250, 0.09);
+  --site-hairline-strong: rgba(244, 246, 250, 0.18);
+
+  /* --- motion */
+  --site-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --site-ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+  --site-fast: 320ms;
+  --site-slow: 900ms;
+
+  /* --- rhythm */
+  --site-shell: 1180px;
+  --site-gutter: clamp(20px, 5vw, 64px);
+  --site-section: clamp(96px, 14vh, 190px);
+
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  background: var(--site-bg);
+  color: var(--site-ink);
+  font-family: var(--font-site), var(--font-mono), ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The app template's page-entrance transform would trap the site's fixed
+   header and scenes in a containing block. Neutralize it for this surface. */
+.view:has(.site-root) {
+  animation: none;
+  transform: none;
+}
+
+.site-root ::selection {
+  background: var(--site-accent);
+  color: #05060a;
+}
+
+.site-root .shell {
+  width: min(var(--site-shell), 100% - var(--site-gutter) * 2);
+  margin-inline: auto;
+}
+
+.site-root .section {
+  position: relative;
+  padding-block: var(--site-section);
+}
+
+/* Anchor targets clear the fixed header instead of hiding under it. */
+.site-root [id] {
+  scroll-margin-top: 96px;
+}
+
+/* ============================== typography ============================== */
+.site-root .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 22px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--site-dim);
+}
+
+.site-root .eyebrow-rule {
+  display: block;
+  width: 34px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--site-accent), transparent);
+}
+
+.site-root .section-title {
+  margin: 0;
+  max-width: 20ch;
+  font-size: clamp(34px, 5.2vw, 66px);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.site-root .section-lede {
+  margin: 22px 0 0;
+  max-width: 46ch;
+  font-size: clamp(15px, 1.4vw, 18px);
+  color: var(--site-muted);
+}
+
+.site-root .section-head.centered {
+  text-align: center;
+}
+.site-root .section-head.centered .eyebrow,
+.site-root .centered-eyebrow {
+  justify-content: center;
+}
+.site-root .section-head.centered .section-title {
+  margin-inline: auto;
+  max-width: 16ch;
+}
+
+/* ============================ atmosphere =============================== */
+/* Film grain: one tiled turbulence tile, nudged a few pixels per step so it
+   shimmers like emulsion instead of crawling like a GIF. */
+.site-grain {
+  position: fixed;
+  inset: -120px;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: grain-shift 700ms steps(1) infinite;
+}
+
+@keyframes grain-shift {
+  0% { transform: translate3d(0, 0, 0); }
+  25% { transform: translate3d(-4%, 3%, 0); }
+  50% { transform: translate3d(3%, -4%, 0); }
+  75% { transform: translate3d(-3%, -2%, 0); }
+  100% { transform: translate3d(2%, 4%, 0); }
+}
+
+/* A soft light trailing the cursor. Composited, never repainted. */
+.cursor-light {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 640px;
+  height: 640px;
+  margin: -320px 0 0 -320px;
+  pointer-events: none;
+  border-radius: 50%;
+  opacity: calc(var(--cursor-on, 0) * 0.5);
+  mix-blend-mode: screen;
+  background: radial-gradient(circle, var(--site-accent-soft) 0%, rgba(105, 122, 255, 0.05) 38%, transparent 68%);
+  transform: translate3d(var(--cursor-x, 50vw), var(--cursor-y, 50vh), 0);
+  will-change: transform;
+}
+
+/* ============================== header ================================= */
+.site-header {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 50;
+  transition: background var(--site-fast) var(--site-ease), backdrop-filter var(--site-fast) var(--site-ease);
+}
+
+.site-header[data-condensed='true'] {
+  background: color-mix(in srgb, var(--site-bg) 72%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+}
+
+.site-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: min(var(--site-shell), 100% - var(--site-gutter) * 2);
+  margin-inline: auto;
+  padding-block: 22px;
+  transition: padding var(--site-fast) var(--site-ease);
+}
+
+.site-header[data-condensed='true'] .site-header-inner {
+  padding-block: 13px;
+}
+
+.site-header-rule {
+  display: block;
+  height: 1px;
+  background: var(--site-hairline);
+  transform-origin: 0 50%;
+  position: relative;
+}
+
+/* The hairline under the header doubles as the read-progress bar. */
+.site-header-rule::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  background: linear-gradient(90deg, var(--site-accent), color-mix(in srgb, var(--site-ink) 80%, transparent));
+  transform: scaleX(var(--scroll-progress, 0));
+  transform-origin: 0 50%;
+}
+
+.site-root .site-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--site-ink);
+  text-decoration: none;
+}
+
+.site-glyph {
+  width: 9px;
+  height: 22px;
+  background: linear-gradient(180deg, var(--site-ink), color-mix(in srgb, var(--site-accent) 70%, transparent));
+  box-shadow: 0 0 24px rgba(105, 122, 255, 0.55);
+  transition: transform var(--site-slow) var(--site-ease);
+}
+
+.site-root .site-wordmark:hover .site-glyph {
+  transform: scaleY(1.22);
+}
+
+.site-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.site-nav a {
+  position: relative;
+  padding: 7px 13px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--site-dim);
+  text-decoration: none;
+  transition: color var(--site-fast) var(--site-ease);
+}
+
+.site-nav a::after {
+  content: '';
+  position: absolute;
+  left: 13px;
+  right: 13px;
+  bottom: 2px;
+  height: 1px;
+  background: var(--site-accent);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform var(--site-fast) var(--site-ease);
+}
+
+.site-nav a:hover,
+.site-nav a[data-active='true'] {
+  color: var(--site-ink);
+}
+.site-nav a[data-active='true']::after,
+.site-nav a:hover::after {
+  transform: scaleX(1);
+}
+
+.site-root .site-header-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border: 1px solid var(--site-hairline-strong);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--site-ink);
+  text-decoration: none;
+  transition: border-color var(--site-fast) var(--site-ease), background var(--site-fast) var(--site-ease);
+}
+
+.site-root .site-header-cta:hover {
+  border-color: var(--site-accent);
+  background: var(--site-accent-soft);
+}
+
+.site-root .site-header-cta span {
+  transition: transform var(--site-fast) var(--site-ease);
+}
+.site-root .site-header-cta:hover span {
+  transform: translateX(4px);
+}
+
+/* =============================== scenes ================================ */
+.scene-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.scene-stage.field {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+.scene-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Shown when the machine has no WebGL, or the shader will not compile: a
+   composed still of the same scene rather than an empty rectangle. */
+.scene-poster {
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(120% 80% at 50% 120%, rgba(105, 122, 255, 0.16), transparent 60%),
+    radial-gradient(70% 55% at 50% 40%, rgba(244, 246, 250, 0.07), transparent 70%),
+    linear-gradient(180deg, #05060a, #020203);
+  position: relative;
+}
+
+.scene-poster[data-variant='monolith']::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 26%;
+  width: clamp(46px, 5vw, 74px);
+  height: clamp(200px, 34vh, 340px);
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, #17171d, #0a0a0e);
+  box-shadow: 0 0 90px rgba(105, 122, 255, 0.25), inset 1px 0 0 rgba(244, 246, 250, 0.35);
+}
+
+.scene-poster[data-variant='field']::after {
+  content: '';
+  position: absolute;
+  inset: 18%;
+  border-radius: 50%;
+  border: 1px solid var(--site-hairline);
+  box-shadow: 0 0 120px rgba(105, 122, 255, 0.18) inset;
+}
+
+/* The scrim keeps hero type legible over whatever the shader is doing. */
+.scene-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(5, 5, 6, 0.72) 0%, transparent 26%, transparent 58%, rgba(5, 5, 6, 0.92) 100%),
+    linear-gradient(90deg, rgba(5, 5, 6, 0.66) 0%, transparent 46%);
+}
+
+/* ================================ hero ================================= */
+.hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding-bottom: clamp(56px, 9vh, 104px);
+  overflow: hidden;
+}
+
+.hero-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  width: min(var(--site-shell), 100% - var(--site-gutter) * 2);
+  margin-inline: auto;
+}
+
+.hero-headline {
+  margin: 0;
+  font-size: clamp(44px, 8.4vw, 118px);
+  font-weight: 600;
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+}
+
+.hero-line {
+  display: block;
+}
+
+.hero-sub {
+  margin: 30px 0 0;
+  max-width: 52ch;
+  font-size: clamp(15px, 1.5vw, 18.5px);
+  color: var(--site-muted);
+  opacity: 0;
+  animation: fade-rise var(--site-slow) var(--site-ease) 1.05s forwards;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 38px;
+  opacity: 0;
+  animation: fade-rise var(--site-slow) var(--site-ease) 1.22s forwards;
+}
+
+.hero-foot {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: min(var(--site-shell), 100% - var(--site-gutter) * 2);
+  margin: clamp(44px, 7vh, 82px) auto 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--site-dim);
+  opacity: 0;
+  animation: fade-rise var(--site-slow) var(--site-ease) 1.45s forwards;
+}
+
+.scroll-cue {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scroll-cue-rail {
+  position: relative;
+  display: block;
+  width: 1px;
+  height: 34px;
+  background: var(--site-hairline);
+  overflow: hidden;
+}
+
+.scroll-cue-dot {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 1px;
+  height: 12px;
+  background: var(--site-accent);
+  animation: cue-run 2.1s var(--site-ease) infinite;
+}
+
+@keyframes cue-run {
+  0% { transform: translateY(-14px); opacity: 0; }
+  35% { opacity: 1; }
+  100% { transform: translateY(34px); opacity: 0; }
+}
+
+/* =========================== kinetic type ============================== */
+.kinetic {
+  display: inline;
+}
+
+.kinetic-mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  padding-bottom: 0.06em;
+  margin-bottom: -0.06em;
+}
+
+.kinetic-word {
+  display: inline-block;
+  transform: translateY(110%);
+  animation: word-rise 1.05s var(--site-ease) forwards;
+}
+
+@keyframes word-rise {
+  to { transform: translateY(0); }
+}
+
+@keyframes fade-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ============================== reveals ================================ */
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity var(--site-slow) var(--site-ease),
+    transform var(--site-slow) var(--site-ease);
+}
+
+.reveal[data-revealed='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+/* =============================== ticker ================================ */
+.ticker {
+  position: relative;
+  z-index: 2;
+  border-block: 1px solid var(--site-hairline);
+  background: var(--site-bg-2);
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+
+.ticker-lane {
+  display: flex;
+  width: max-content;
+  animation: ticker-run 34s linear infinite;
+}
+
+.ticker-run {
+  display: flex;
+  align-items: center;
+}
+
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 26px;
+  padding: 16px 0;
+  padding-right: 26px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--site-dim);
+  white-space: nowrap;
+}
+
+.ticker-sep {
+  display: block;
+  width: 4px;
+  height: 4px;
+  background: var(--site-accent);
+}
+
+@keyframes ticker-run {
+  to { transform: translateX(-50%); }
+}
+
+/* ============================= manifesto =============================== */
+.manifesto-body {
+  margin: 46px 0 0;
+  max-width: 34ch;
+  font-size: clamp(23px, 2.9vw, 38px);
+  font-weight: 500;
+  line-height: 1.26;
+  letter-spacing: -0.03em;
+}
+
+/* Each word lights as the section moves through the viewport. --p comes from
+   ScrollTrack; --i and --n are written server-side by WordFlow. */
+.wordflow-word {
+  opacity: clamp(0.13, calc((var(--p, 0) * 1.55 * var(--n) - var(--i)) * 0.42), 1);
+  transition: opacity 120ms linear;
+}
+
+.manifesto-sign {
+  margin-top: 40px;
+  max-width: 42ch;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--site-dim);
+}
+
+/* =============================== system ================================ */
+.system {
+  border-top: 1px solid var(--site-hairline);
+  background: linear-gradient(180deg, var(--site-bg), var(--site-bg-2) 55%, var(--site-bg));
+  /* Extra height buys the morph its own stretch of scroll: swarm → hierarchy
+     → orbit resolves over roughly two screens rather than in a blink. The
+     column layout passes that height down to the grid, which is what gives
+     the sticky scene something to travel through. */
+  min-height: 178vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.system > .shell {
+  flex: 1 1 auto;
+}
+
+.system-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr);
+  gap: clamp(32px, 6vw, 90px);
+  height: 100%;
+  /* Columns stretch (the default) so the scene column is tall enough for its
+     sticky child to actually travel. */
+}
+
+.system-scene {
+  position: relative;
+  height: 100%;
+}
+
+.system-scene-sticky {
+  position: sticky;
+  top: 18vh;
+  border: 1px solid var(--site-hairline);
+  background: radial-gradient(70% 70% at 50% 45%, rgba(105, 122, 255, 0.07), transparent 70%);
+}
+
+.system-scene-frame {
+  position: absolute;
+  inset: 10px;
+  pointer-events: none;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--site-hairline-strong), var(--site-hairline-strong)) 0 0 / 14px 1px no-repeat,
+    linear-gradient(var(--site-hairline-strong), var(--site-hairline-strong)) 0 0 / 1px 14px no-repeat,
+    linear-gradient(var(--site-hairline-strong), var(--site-hairline-strong)) 100% 100% / 14px 1px no-repeat,
+    linear-gradient(var(--site-hairline-strong), var(--site-hairline-strong)) 100% 100% / 1px 14px no-repeat;
+}
+
+/* The three states are spread down the full height of the section, so each
+   description arrives roughly as the field settles into that formation — the
+   copy paces the morph instead of racing ahead of it. */
+.system-copy {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.state-list {
+  flex: 1 1 auto;
+  margin: 54px 0 0;
+  padding: 0 0 8vh;
+  list-style: none;
+  display: grid;
+  align-content: space-between;
+  gap: 2px;
+}
+
+.state {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 18px;
+  padding: 24px 0;
+  border-top: 1px solid var(--site-hairline);
+}
+
+.state-index {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--site-accent);
+}
+
+.state-name {
+  margin: 0 0 8px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.state-copy {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 15px;
+  color: var(--site-muted);
+}
+
+/* ============================== pillars ================================ */
+.pillars {
+  border-top: 1px solid var(--site-hairline);
+  overflow: hidden;
+}
+
+.carousel {
+  margin-top: clamp(48px, 7vw, 86px);
+}
+
+.carousel-stage {
+  perspective: 1500px;
+  perspective-origin: 50% 44%;
+  height: clamp(330px, 40vw, 400px);
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+.carousel-stage.dragging {
+  cursor: grabbing;
+}
+
+.carousel-ring {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.pillar-face {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: clamp(280px, 34vw, 400px);
+  height: 100%;
+  margin-left: calc(clamp(280px, 34vw, 400px) / -2);
+  padding: 30px 30px 26px;
+  border: 1px solid var(--site-hairline);
+  background: linear-gradient(180deg, rgba(244, 246, 250, 0.045), rgba(244, 246, 250, 0.012));
+  backdrop-filter: blur(2px);
+  /* Faces turned away from the viewer are hidden outright — without this the
+     back of the ring shows through as mirrored text. */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transition: border-color var(--site-slow) var(--site-ease), background var(--site-slow) var(--site-ease);
+}
+
+.pillar-face[data-active='true'] {
+  border-color: color-mix(in srgb, var(--site-accent) 55%, transparent);
+  background: linear-gradient(180deg, rgba(105, 122, 255, 0.12), rgba(244, 246, 250, 0.02));
+}
+
+.pillar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--site-hairline);
+}
+
+.pillar-code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: var(--site-dim);
+}
+
+.pillar-name {
+  margin: 0;
+  font-size: clamp(24px, 2.6vw, 32px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.pillar-brief {
+  margin: 20px 0 0;
+  font-size: 14.5px;
+  color: var(--site-muted);
+}
+
+.pillar-agents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pillar-agents li {
+  padding: 5px 10px;
+  border: 1px solid var(--site-hairline);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--site-muted);
+}
+
+.carousel-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: clamp(28px, 4vw, 46px);
+}
+
+.carousel-btn,
+.carousel-dots button {
+  border: 1px solid var(--site-hairline);
+  background: transparent;
+  color: var(--site-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  cursor: pointer;
+  transition: border-color var(--site-fast) var(--site-ease), color var(--site-fast) var(--site-ease);
+}
+
+.carousel-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+}
+
+.carousel-dots {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.carousel-dots button {
+  padding: 8px 14px;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.carousel-btn:hover,
+.carousel-dots button:hover {
+  border-color: var(--site-hairline-strong);
+  color: var(--site-ink);
+}
+
+.carousel-dots button[data-active='true'] {
+  border-color: var(--site-accent);
+  color: var(--site-ink);
+  background: var(--site-accent-soft);
+}
+
+/* ============================== modules ================================ */
+.modules {
+  border-top: 1px solid var(--site-hairline);
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 18px;
+  margin-top: clamp(44px, 6vw, 76px);
+}
+
+.tilt {
+  perspective: 1100px;
+  height: 100%;
+}
+
+.tilt-inner {
+  position: relative;
+  height: 100%;
+  transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+  transform-style: preserve-3d;
+  transition: transform 120ms linear;
+  will-change: transform;
+}
+
+.tilt-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: calc(var(--hover, 0) * 0.9);
+  background: radial-gradient(
+    460px circle at var(--sheen-x, 50%) var(--sheen-y, 50%),
+    rgba(244, 246, 250, 0.11),
+    transparent 55%
+  );
+  transition: opacity var(--site-fast) var(--site-ease);
+}
+
+.tilt-edge {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 1px solid transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--site-accent) calc(var(--hover, 0) * 45%), transparent);
+}
+
+.site-root .module-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 26px 24px 22px;
+  border: 1px solid var(--site-hairline);
+  background: linear-gradient(180deg, rgba(244, 246, 250, 0.038), rgba(244, 246, 250, 0.01));
+  color: inherit;
+  text-decoration: none;
+  transform: translateZ(0);
+}
+
+.module-head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transform: translateZ(26px);
+}
+
+.module-route {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--site-accent);
+}
+
+.module-title {
+  margin: 0;
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.module-blurb {
+  margin: 16px 0 0;
+  font-size: 14.5px;
+  color: var(--site-muted);
+  transform: translateZ(16px);
+}
+
+.module-detail {
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 7px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--site-dim);
+}
+
+.module-detail li {
+  display: flex;
+  gap: 9px;
+}
+
+.module-detail li::before {
+  content: '';
+  flex: none;
+  width: 3px;
+  height: 3px;
+  margin-top: 7px;
+  background: var(--site-dim);
+}
+
+.module-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 24px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--site-muted);
+}
+
+.module-go i {
+  font-style: normal;
+  transition: transform var(--site-fast) var(--site-ease);
+}
+
+.site-root .module-card:hover .module-go i {
+  transform: translateX(6px);
+}
+
+/* =============================== proof ================================= */
+.proof {
+  border-top: 1px solid var(--site-hairline);
+  background: var(--site-bg-2);
+}
+
+.proof-eyebrow {
+  justify-content: center;
+  margin-bottom: 40px;
+}
+
+.metric-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 1px;
+  background: var(--site-hairline);
+  border: 1px solid var(--site-hairline);
+}
+
+.metric {
+  padding: 34px 26px;
+  background: var(--site-bg-2);
+}
+
+.metric-value {
+  display: block;
+  font-size: clamp(44px, 6vw, 76px);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-label {
+  margin: 16px 0 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--site-accent);
+}
+
+.metric-note {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  color: var(--site-muted);
+}
+
+/* ============================== process ================================ */
+.process {
+  border-top: 1px solid var(--site-hairline);
+}
+
+.process-list {
+  position: relative;
+  margin: clamp(44px, 6vw, 76px) 0 0;
+  padding: 0 0 0 clamp(28px, 5vw, 64px);
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+
+.process-spine {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  width: 1px;
+  background: var(--site-hairline);
+}
+
+/* Drawn by scroll: --p is published by the ScrollTrack wrapper. */
+.process-spine-fill {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: calc(var(--p, 0) * 100%);
+  background: linear-gradient(180deg, var(--site-accent), color-mix(in srgb, var(--site-ink) 65%, transparent));
+  box-shadow: 0 0 18px rgba(105, 122, 255, 0.5);
+}
+
+.process-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  column-gap: clamp(24px, 4vw, 64px);
+  align-items: start;
+  padding: 34px 0;
+  border-top: 1px solid var(--site-hairline);
+}
+
+.process-step::before {
+  content: '';
+  position: absolute;
+  left: calc(clamp(28px, 5vw, 64px) * -1 - 3px);
+  top: 34px;
+  width: 7px;
+  height: 7px;
+  background: var(--site-bg);
+  box-shadow: inset 0 0 0 1px var(--site-hairline-strong);
+}
+
+.process-index {
+  grid-column: 1;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.22em;
+  color: var(--site-accent);
+}
+
+.process-title {
+  grid-column: 1;
+  margin: 12px 0 0;
+  max-width: 14ch;
+  font-size: clamp(21px, 2.4vw, 30px);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+
+.process-copy {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  margin: 0;
+  max-width: 54ch;
+  font-size: clamp(15px, 1.3vw, 17px);
+  color: var(--site-muted);
+}
+
+/* ================================ cta ================================== */
+.cta {
+  position: relative;
+  border-top: 1px solid var(--site-hairline);
+  text-align: center;
+  overflow: hidden;
+}
+
+.cta::before {
+  content: '';
+  position: absolute;
+  inset: -40% 0 auto 0;
+  height: 160%;
+  background: radial-gradient(50% 42% at 50% 50%, rgba(105, 122, 255, 0.16), transparent 68%);
+  pointer-events: none;
+}
+
+.cta-inner {
+  position: relative;
+}
+
+.cta-title {
+  margin: 0;
+  font-size: clamp(36px, 6.4vw, 82px);
+  font-weight: 600;
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+}
+
+.cta-body {
+  margin: 26px auto 0;
+  max-width: 56ch;
+  font-size: clamp(15px, 1.5vw, 18px);
+  color: var(--site-muted);
+}
+
+.cta-actions {
+  justify-content: center;
+  opacity: 1;
+  animation: none;
+}
+
+.cta-reassurance {
+  margin: 26px 0 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--site-dim);
+}
+
+/* ============================== buttons ================================ */
+.site-root .magnetic {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 190px;
+  padding: 16px 30px;
+  border: 1px solid var(--site-ink);
+  color: #05060a;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-decoration: none;
+  overflow: hidden;
+  isolation: isolate;
+  transform: translate3d(var(--mag-x, 0), var(--mag-y, 0), 0);
+  transition: color var(--site-fast) var(--site-ease), border-color var(--site-fast) var(--site-ease);
+}
+
+.site-root .magnetic[data-variant='ghost'] {
+  border-color: var(--site-hairline-strong);
+  color: var(--site-ink);
+}
+
+.magnetic-label {
+  position: relative;
+  z-index: 2;
+}
+
+/* The fill wipes up from the bottom edge on hover — one transform, no repaint. */
+.magnetic-fill {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: var(--site-ink);
+  transform: translateY(0);
+  transition: transform 520ms var(--site-ease);
+}
+
+.site-root .magnetic[data-variant='ghost'] .magnetic-fill {
+  transform: translateY(101%);
+}
+
+.site-root .magnetic[data-variant='ghost']:hover {
+  color: #05060a;
+  border-color: var(--site-ink);
+}
+.site-root .magnetic[data-variant='ghost']:hover .magnetic-fill {
+  transform: translateY(0);
+}
+
+.site-root .magnetic[data-variant='solid']:hover .magnetic-fill {
+  transform: translateY(-101%);
+}
+.site-root .magnetic[data-variant='solid']:hover {
+  color: var(--site-ink);
+  border-color: var(--site-accent);
+}
+
+.site-root .magnetic:focus-visible,
+.site-root a:focus-visible,
+.site-root button:focus-visible {
+  outline: 2px solid var(--site-accent);
+  outline-offset: 3px;
+}
+
+/* =============================== footer ================================ */
+.site-footer {
+  border-top: 1px solid var(--site-hairline);
+  padding-block: clamp(56px, 8vw, 90px) 34px;
+  background: var(--site-bg-2);
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(auto-fit, minmax(140px, 1fr));
+  gap: 40px;
+}
+
+.site-root .site-wordmark.static {
+  cursor: default;
+}
+
+.footer-blurb {
+  margin: 18px 0 0;
+  max-width: 34ch;
+  font-size: 14px;
+  color: var(--site-muted);
+}
+
+.footer-col-title {
+  margin: 0 0 16px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--site-dim);
+}
+
+.footer-col ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.site-root .footer-col a {
+  font-size: 14px;
+  color: var(--site-muted);
+  text-decoration: none;
+  transition: color var(--site-fast) var(--site-ease);
+}
+
+.site-root .footer-col a:hover {
+  color: var(--site-ink);
+}
+
+.footer-legal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: clamp(48px, 7vw, 80px);
+  padding-top: 22px;
+  border-top: 1px solid var(--site-hairline);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--site-dim);
+}
+
+/* ============================ breakpoints ============================== */
+@media (max-width: 1020px) {
+  .system-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .system {
+    min-height: 0;
+    display: block;
+  }
+  .system-copy {
+    display: block;
+    height: auto;
+  }
+  .state-list {
+    padding-bottom: 0;
+  }
+  .system-scene-sticky {
+    position: relative;
+    top: 0;
+  }
+  .system-scene {
+    order: -1;
+    margin-bottom: 42px;
+  }
+  .site-nav {
+    display: none;
+  }
+}
+
+@media (max-width: 780px) {
+  .process-step {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .process-copy {
+    grid-column: 1;
+    grid-row: auto;
+    margin-top: 14px;
+  }
+  .process-title {
+    max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  /* On a narrow column the copy sits directly over the slab, so the scrim
+     carries more weight from the bottom up. */
+  .scene-scrim {
+    background:
+      linear-gradient(180deg, rgba(5, 5, 6, 0.7) 0%, rgba(5, 5, 6, 0.15) 24%, rgba(5, 5, 6, 0.82) 62%, rgba(5, 5, 6, 0.97) 100%);
+  }
+  .site-root .site-header-cta {
+    display: none;
+  }
+  .hero-foot {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .hero-coords {
+    display: none;
+  }
+  .carousel-dots {
+    display: none;
+  }
+}
+
+/* ============================== no script ==============================
+   Entrances are opacity-0-until-observed, which is correct with JS and wrong
+   without it. When scripting is off, nothing will ever flip data-revealed, so
+   every entrance resolves to its final state and the page reads as a plain,
+   complete document. */
+@media (scripting: none) {
+  .site-root .reveal,
+  .site-root .reveal[data-revealed='false'] {
+    opacity: 1;
+    transform: none;
+  }
+
+  .site-root .kinetic-word {
+    transform: none;
+    animation: none;
+  }
+
+  .site-root .hero-sub,
+  .site-root .hero-actions,
+  .site-root .hero-foot {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+
+  .site-root .wordflow-word {
+    opacity: 1;
+  }
+}
+
+/* ============================ reduced motion =========================== */
+@media (prefers-reduced-motion: reduce) {
+  .site-root *,
+  .site-root *::before,
+  .site-root *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .kinetic-word,
+  .hero-sub,
+  .hero-actions,
+  .hero-foot {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+
+  .wordflow-word {
+    opacity: 1;
+  }
+
+  .site-grain,
+  .cursor-light,
+  .scroll-cue-dot {
+    display: none;
+  }
+
+  .ticker-lane {
+    animation: none;
+  }
+}

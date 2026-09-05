@@ -58,6 +58,17 @@ npm run seed                 # re-seed the demo DB (idempotent)
 | `/skills` | Reusable, schedulable agent skills |
 | `/org` | Org hierarchy: operator, conductor, pillars, workers |
 | `/brain` | The knowledge core and graph (see **Knowledge layer** below) |
+| `/site` | The public marketing site: two hand-written WebGL scenes (a raymarched monolith, a scroll-morphing agent field), no 3D library |
+
+The marketing site can also be hosted on its own, with no server and no
+database behind it:
+
+```bash
+cd site-standalone && npm install && npm run build   # → site-standalone/out/
+```
+
+It re-exports the same page rather than copying it, so the two never drift.
+See `site-standalone/README.md`.
 | `/workflows` | Multi-step tool workflows |
 | `/integrations` | Live connections board with honest status for every connector |
 | `/analytics` | Real connector numbers and sparkline history |

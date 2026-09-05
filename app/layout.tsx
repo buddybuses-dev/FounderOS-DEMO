@@ -1,10 +1,7 @@
 import type { Metadata } from 'next';
 import { JetBrains_Mono } from 'next/font/google';
 import './globals.css';
-import { Sidebar } from '@/components/Sidebar';
-import { Topbar } from '@/components/Topbar';
-import { CommandPalette } from '@/components/CommandPalette';
-import { ConductorPanel } from '@/components/ConductorPanel';
+import { AppChrome } from '@/components/AppChrome';
 import { getDb } from '@/lib/data';
 import type { Command } from '@/lib/palette';
 import { THEME_INIT_SCRIPT } from '@/lib/theme';
@@ -31,6 +28,7 @@ const NAV_COMMANDS: Command[] = [
   { id: 'nav-reference', label: 'Reference Model', keywords: 'domains business brm', href: '/reference', hint: 'view' },
   { id: 'nav-org', label: 'Org Chart', keywords: 'org chart hierarchy departments tree structure leads specialists', href: '/org', hint: 'view' },
   { id: 'nav-brain', label: 'G-Brain', keywords: 'brain knowledge core markdown vector pgvector supabase embeddings zeroentropy graph doctor', href: '/brain', hint: 'view' },
+  { id: 'nav-site', label: 'Public Site', keywords: 'marketing landing website public founderos brand', href: '/site', hint: 'view' },
   // Local apps discovered on this machine — open in a new tab
   { id: 'ext-command-center', label: 'Command Center', keywords: 'command-center kanban missions port 4000', href: 'http://localhost:4000', hint: 'localhost' },
   { id: 'ext-remotion', label: 'Remotion Studio', keywords: 'video render pipeline port 3789', href: 'http://localhost:3789', hint: 'localhost' },
@@ -66,22 +64,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>
-        <Sidebar />
-        {/* os-shell yields to the Conductor dock: the panel sets --conductor-w
-            and the whole content column glides left instead of being covered */}
-        <div className="os-shell ml-[232px] flex min-h-screen min-w-0 flex-col" style={{ marginRight: 'var(--conductor-w, 0px)' }}>
-          <Topbar />
-          <main className="min-w-0 flex-1 px-8 pb-16 pt-7 wide:px-10 ultra:px-12">
-            {/* Width tiers: 1280 on laptops · 1760 on large monitors ·
-                full-bleed on 32"/ultrawide. See tailwind screens wide/ultra. */}
-            <div className="mx-auto max-w-[1280px] wide:max-w-[1760px] ultra:max-w-none">
-              {children}
-            </div>
-          </main>
-        </div>
-        <CommandPalette commands={buildCommands()} />
-        {/* Notion-style agent dock — the Conductor, aware of the current screen */}
-        <ConductorPanel />
+        {/* AppChrome gates the OS shell by route: the console gets the full
+            chrome, the public site at /site renders edge-to-edge without it. */}
+        <AppChrome commands={buildCommands()}>{children}</AppChrome>
       </body>
     </html>
   );

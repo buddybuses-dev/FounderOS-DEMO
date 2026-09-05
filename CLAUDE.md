@@ -81,11 +81,45 @@ capture / life-map / pipeline / graph / query-path sections kept underneath) ·
 `/funnel` living client-journey flow (Vantage + Launchpad Cohort: stage
 columns left→right, one node per client, 4–5 touch markers per path; seeded
 dummy, real-ready for Trakyo organic + Meta Ads MCP paid attribution) ·
-`/reference` reference model · `/integrations` live connections board. Chrome:
+`/reference` reference model · `/integrations` live connections board ·
+`/site` the **public marketing site** — a separate surface from the console
+(see below). Chrome:
 fixed `Sidebar` (Operate/System groups) + sticky `Topbar` (breadcrumb + ⌘K) +
 `CommandPalette` (⌘K, digit-key view jumps). API routes mirror these under
 `app/api/*` — note `GET /api/brain?q=` runs a hybrid search; bare `GET` returns
 provider status.
+
+## Public site (`/site`)
+
+Marketing site for Founder OS, deliberately built as its own surface:
+
+- `components/AppChrome.tsx` gates the OS shell by route (`isSiteRoute`), so
+  `/site` renders edge-to-edge with no sidebar/topbar/palette/conductor.
+- Its palette, type scale and motion system live in `app/site/site.css`,
+  scoped under `.site-root` — nothing there can leak into the themed console.
+  Display type is Inter (site only); mono stays JetBrains for labels.
+- Two hand-written WebGL scenes, **no 3D library**: `HeroMonolith` raymarches
+  an SDF scene (slab, orbit rings, mirror floor, soft shadows, AO, one
+  reflective bounce, ACES + grain); `AgentField` is a GPU point cloud that
+  morphs sphere → lattice → ring on scroll, with per-formation constellation
+  links. GLSL lives in `lib/site/shaders.ts`; the uniform/attribute name lists
+  are checked against the source in tests.
+- `lib/site/motion.ts` is the pure math (damping, easings, a mat4 camera
+  stack, morph-target geometry, k-NN edges) — all unit-tested.
+- `lib/site/gl.ts` owns context plumbing: DPR cap, pixel budget, adaptive
+  resolution (`nextScale`), compile/link errors that surface the driver log.
+- `lib/site/content.ts` holds every word, Zod-validated at module load.
+- `site-standalone/` is the **static-hosting target**: a build shell whose
+  `app/page.tsx` re-exports `app/site/page.tsx` (never a copy), built with
+  `output: 'export'` — HTML + assets, no server, no SQLite. Console links go
+  through `consoleHref`, so `NEXT_PUBLIC_CONSOLE_URL` (defaulted in
+  `site-standalone/next.config.mjs`) points them somewhere real when no
+  console is deployed behind the page.
+- Non-negotiables enforced by `tests/site-*.test.ts`: both scenes lazy
+  (`ssr: false`) behind dimension-matched skeletons, reduced-motion honored,
+  rAF loops cancelled, scenes paused off-screen/hidden-tab, WebGL failures
+  fall back to a poster, and `@media (scripting: none)` hands back every
+  entrance so the page reads with no JS.
 
 ## Conventions
 
