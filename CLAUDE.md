@@ -109,6 +109,12 @@ Marketing site for Founder OS, deliberately built as its own surface:
 - `lib/site/gl.ts` owns context plumbing: DPR cap, pixel budget, adaptive
   resolution (`nextScale`), compile/link errors that surface the driver log.
 - `lib/site/content.ts` holds every word, Zod-validated at module load.
+- `site-standalone/` is the **static-hosting target**: a build shell whose
+  `app/page.tsx` re-exports `app/site/page.tsx` (never a copy), built with
+  `output: 'export'` — HTML + assets, no server, no SQLite. Console links go
+  through `consoleHref`, so `NEXT_PUBLIC_CONSOLE_URL` (defaulted in
+  `site-standalone/next.config.mjs`) points them somewhere real when no
+  console is deployed behind the page.
 - Non-negotiables enforced by `tests/site-*.test.ts`: both scenes lazy
   (`ssr: false`) behind dimension-matched skeletons, reduced-motion honored,
   rAF loops cancelled, scenes paused off-screen/hidden-tab, WebGL failures
